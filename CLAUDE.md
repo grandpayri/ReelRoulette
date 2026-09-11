@@ -11,7 +11,7 @@ The app is one self-contained file, `index.html`, with inline CSS and vanilla JS
 ## Running and deploying
 
 - **The app** is hosted on GitHub Pages from the root of the `main` branch of `grandpayri/ReelRoulette`, at https://grandpayri.github.io/ReelRoulette/. Pushing to `main` deploys it.
-- **The proxy** runs as a Netlify Function from the same repo, which Netlify deploys on push. `netlify.toml` publishes the repo as-is. The shared TMDB key is only in the Netlify environment variable `TMDB_API_KEY`, never in the repo.
+- **The proxy** runs as a Netlify Function from the same repo, at https://grandpayri-reelroulette.netlify.app/api/tmdb/, and Netlify deploys it on push. The Netlify project must stay publicly visible, or every request is redirected to a Netlify login. `netlify.toml` publishes the repo as-is. The shared TMDB key is only in the Netlify environment variable `TMDB_API_KEY`, never in the repo.
 - **Connecting the two:** `RELAY_URL` in `index.html` points the app at the proxy. When it's empty, the app requires a personal key, as before.
 - **Local testing:** serve the folder over HTTP rather than opening `file://`. The Claude desktop Browser pane turns local files into `data:` URLs, and `localStorage` is disabled there.
 - **Testing without an API key:**
@@ -23,7 +23,8 @@ The app is one self-contained file, `index.html`, with inline CSS and vanilla JS
 - **Allowlists:** it only forwards the endpoints and query params the app uses (`ROUTES`), and `append_to_response` is limited to `credits`. **If the app starts sending a new endpoint or param, add it to `ROUTES` too, or the proxy returns 400/404.**
 - **Rate limiting:** Netlify rate-limits per visitor IP through `export const config.rateLimit`. Netlify's own 429 response has no CORS headers, so the browser sees it as a network error. `tmdb()` in the app words that error to match.
 - **Origins:** browser requests are accepted only from `https://grandpayri.github.io` and localhost. Requests with no `Origin` header are allowed.
-- **Caching:** successful responses are cached at Netlify's CDN (`Netlify-CDN-Cache-Control`, varied by Origin).
+- **Caching:** successful responses are cached at Netlify's CDN (`Netlify-CDN-Cache-Control`). `Netlify-Vary` must include `query`: a custom `Netlify-Vary` replaces the default cache key, and without `query` every discover or search call to the same path gets one cached response.
+- **Other origins:** pages served from other origins, such as a Claude artifact or a `data:` URL, get a 403 from the proxy. They need a personal key.
 - **Hiding the key:** a TMDB 401 is returned as 502, so visitors are never told "your key was rejected".
 
 ## Architecture

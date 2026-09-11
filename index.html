@@ -278,7 +278,7 @@ const $=id=>document.getElementById(id);
 // Visitors without their own key go through the shared Netlify proxy
 // (netlify/functions/tmdb.mjs), which adds the key server-side. Empty = no proxy,
 // so a personal key is required.
-const RELAY_URL = "";
+const RELAY_URL = "https://grandpayri-reelroulette.netlify.app/api/tmdb";
 const usingRelay = ()=> !apiKey && !!RELAY_URL;
 
 async function tmdb(path, params){
