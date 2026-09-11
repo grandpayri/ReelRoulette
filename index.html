@@ -57,6 +57,13 @@
   .setup-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:10px;}
   .setup-card p{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 14px;}
   .setup-card label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .key-help{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:0 0 16px;}
+  .key-help .key-help-title{color:var(--text);font-weight:600;margin:0 0 6px;}
+  .key-help ol{margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.5;}
+  .key-help li{margin-bottom:4px;}
+  .key-help li b{color:var(--text);}
+  .key-help a{color:var(--gold);}
+  .key-help .key-help-note{font-size:12px;margin:6px 0 0;}
   .save-btn{width:100%;background:var(--gold);color:#14151A;border:none;padding:13px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px;}
   .err{color:#e5786a;font-size:12px;margin-top:8px;}
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--bg);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px;}
@@ -83,7 +90,16 @@
 
   <div id="setupSection" style="display:none;">
     <div class="setup-card">
-      <p>Uses TMDB's live catalog data. Paste your TMDB API key (v3 auth) — it's saved privately to your own storage, never written into this file.</p>
+      <p>Uses live catalog data from The Movie Database (TMDB). Paste your TMDB API key below — it's saved privately to your own storage and only ever sent to TMDB.</p>
+      <div class="key-help">
+        <p class="key-help-title">Don't have a key? It's free:</p>
+        <ol>
+          <li>Create a free account at <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org</a> and confirm your email.</li>
+          <li>Go to <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Settings → API</a> and request an API key. Choose personal use and fill out the short form.</li>
+          <li>Copy the <b>API Key</b> (the short one), not the long "API Read Access Token", and paste it below.</li>
+        </ol>
+        <p class="key-help-note">TMDB's sign-up form works best on a computer.</p>
+      </div>
       <label>TMDB API key</label>
       <input type="password" id="apiKeyInput" placeholder="Paste your TMDB API key">
       <label style="margin-top:12px;">Region</label>
@@ -240,6 +256,10 @@ $('saveKeyBtn').onclick = async ()=>{
   const reg = $('regionInput').value;
   $('setupErr').style.display='none';
   if(!key){ $('setupErr').textContent="Paste a key first."; $('setupErr').style.display='block'; return; }
+  if(key.startsWith('eyJ')){ // v4 read access tokens are JWTs; this app uses the v3 api_key param
+    $('setupErr').textContent="That looks like the API Read Access Token. Paste the shorter API Key instead.";
+    $('setupErr').style.display='block'; return;
+  }
   $('saveKeyBtn').innerHTML='<span class="spin"></span>Checking key...';
   try{
     apiKey = key; region = reg;
