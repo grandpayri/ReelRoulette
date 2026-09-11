@@ -43,6 +43,8 @@
   .result-poster{width:90px;height:135px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0;}
   .platform-badge{display:inline-block;background:var(--rust);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;margin:0 6px 6px 0;}
   .platform-badge.free{background:#2E7D32;}
+  a.platform-badge{text-decoration:none;}
+  a.platform-badge:hover{filter:brightness(1.15);}
   .result-title{font-size:21px;font-weight:700;margin:0 0 4px;line-height:1.2;}
   .result-meta{color:var(--muted);font-size:13px;margin:0 0 8px;}
   .result-detail{font-size:14px;margin:0 0 6px;}
@@ -194,7 +196,7 @@
 
     <div class="result-card" id="resultCard">
       <div class="result-top">
-        <img class="result-poster" id="resPoster" src="" alt="">
+        <a id="resPosterLink" target="_blank" rel="noopener" title="View on TMDB"><img class="result-poster" id="resPoster" src="" alt=""></a>
         <div>
           <h2 class="result-title" id="resTitle"></h2>
           <p class="result-meta" id="resMeta"></p>
@@ -232,6 +234,23 @@ const KNOWN_PLATFORMS = [
   {match:"pluto tv", label:"Pluto TV"}
 ];
 const FREE_LABELS = new Set(["Tubi","Pluto TV"]);
+
+// TMDB doesn't expose per-service deep links (that data is JustWatch's), so result
+// badges open the service's own search for the title. Services not listed here
+// fall back to TMDB's "where to watch" page, which links out to each service.
+const AMAZON_DOMAINS = {US:"amazon.com", GB:"amazon.co.uk", CA:"amazon.ca", AU:"amazon.com.au", DE:"amazon.de", FR:"amazon.fr"};
+const SERVICE_SEARCH = [
+  {match:"netflix",  url:q=>"https://www.netflix.com/search?q="+q},
+  {match:"amazon",   url:q=>"https://www."+(AMAZON_DOMAINS[region]||"amazon.com")+"/s?k="+q+"&i=instant-video"},
+  {match:"hulu",     url:q=>"https://www.hulu.com/search?q="+q},
+  {match:"apple tv", url:q=>"https://tv.apple.com/search?term="+q},
+  {match:"tubi",     url:q=>"https://tubitv.com/search/"+q}
+];
+function tmdbPageUrl(id){ return "https://www.themoviedb.org/"+mediaType+"/"+id; }
+function serviceSearchUrl(providerName, title){
+  const s = SERVICE_SEARCH.find(s=>providerName.toLowerCase().includes(s.match));
+  return s ? s.url(encodeURIComponent(title)) : null;
+}
 const IMG_BASE = "https://image.tmdb.org/t/p/w300";
 
 // Per-mode settings. The keys are TMDB media types, used directly in API paths
@@ -551,7 +570,8 @@ function shuffle(arr){
   return a;
 }
 
-const ITEM_W = 106; // 96px item + 10px gap, must match CSS
+const POSTER_W = 96; // .roulette-item width, must match CSS
+const ITEM_W = POSTER_W + 10; // plus .roulette-strip gap
 const TARGET_INDEX = 46; // where the winner lands in the built strip
 
 function buildStrip(pool, winner){
@@ -574,7 +594,7 @@ async function spinToMovie(){
   const items = buildStrip(pool, winner);
 
   strip.innerHTML = items.map((m,i)=>
-    '<div class="roulette-item" data-i="'+i+'"><img src="'+IMG_BASE+m.poster_path+'" loading="lazy"></div>'
+    '<a class="roulette-item" data-i="'+i+'" href="'+tmdbPageUrl(m.id)+'" target="_blank" rel="noopener"><img src="'+IMG_BASE+m.poster_path+'" loading="lazy"></a>'
   ).join('');
   strip.style.transition = 'none';
   strip.style.transform = 'translateX(0px)';
@@ -583,8 +603,8 @@ async function spinToMovie(){
   // force reflow so the browser registers the reset position before animating
   void strip.offsetWidth;
 
-  const viewportWidth = rouletteWrap.offsetWidth;
-  const targetX = -(TARGET_INDEX*ITEM_W + ITEM_W/2 - viewportWidth/2);
+  const viewportWidth = rouletteWrap.clientWidth; // inside the border, where the strip is positioned
+  const targetX = -(TARGET_INDEX*ITEM_W + POSTER_W/2 - viewportWidth/2);
 
   await new Promise(resolve=>{
     requestAnimationFrame(()=>{
@@ -614,8 +634,11 @@ async function renderMovie(movieStub){
   (regionWatch.flatrate||[]).forEach(p=> badges.push({label:p.provider_name, free:false}));
   (regionWatch.free||[]).forEach(p=> badges.push({label:p.provider_name, free:true}));
   (regionWatch.ads||[]).forEach(p=> badges.push({label:p.provider_name, free:true}));
+  const title = details.title || details.name;
+  const tmdbWatchUrl = regionWatch.link || tmdbPageUrl(movieStub.id)+'/watch?locale='+region;
 
   $('resPoster').src = details.poster_path ? IMG_BASE+details.poster_path : '';
+  $('resPosterLink').href = tmdbPageUrl(movieStub.id);
   $('resTitle').textContent = details.title || details.name; // TV uses name/first_air_date
   const date = details.release_date || details.first_air_date;
   let meta = date ? date.slice(0,4) : "—";
@@ -631,7 +654,16 @@ async function renderMovie(movieStub){
   $('resGenre').textContent = details.genres.map(g=>g.name).join(", ") || "—";
   $('resStars').textContent = (details.credits.cast||[]).slice(0,3).map(c=>c.name).join(", ") || "—";
   $('resOverview').textContent = details.overview || "";
-  $('resPlatforms').innerHTML = badges.length ? badges.map(b=>'<span class="platform-badge'+(b.free?' free':'')+'">'+b.label+(b.free?' · Free':'')+'</span>').join('') : '<span class="platform-badge">Check availability</span>';
+  $('resPlatforms').innerHTML = '';
+  if(!badges.length) badges.push({label:'Check availability', free:false});
+  badges.forEach(b=>{
+    const a = document.createElement('a');
+    a.className = 'platform-badge'+(b.free?' free':'');
+    a.href = serviceSearchUrl(b.label, title) || tmdbWatchUrl;
+    a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = b.label+(b.free?' · Free':'')+' ↗';
+    $('resPlatforms').appendChild(a);
+  });
   $('resultCard').classList.add('show');
   $('resultErr').style.display='none';
 }
