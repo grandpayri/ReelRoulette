@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reel Roulette</title>
+<style>
+  :root{
+    --bg:#14151A; --surface:#1E2028; --surface2:#262933;
+    --gold:#F2B705; --rust:#C2410C; --text:#EDECE6; --muted:#8B8D98; --line:#33363F;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:480px;margin:0 auto;padding:24px 18px 60px;}
+  .marquee{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:34px;letter-spacing:.5px;line-height:1.05;margin:0 0 4px;color:var(--gold);}
+  .subhead{color:var(--muted);font-size:14px;margin:0 0 24px;line-height:1.5;}
+  .section{margin-bottom:22px;}
+  .section-title{font-size:13px;color:var(--muted);margin:0 0 10px;display:flex;justify-content:space-between;align-items:center;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{border:1px solid var(--line);background:var(--surface);color:var(--text);padding:9px 14px;border-radius:8px;font-size:14px;cursor:pointer;transition:border-color .15s,background .15s;user-select:none;display:flex;align-items:center;gap:6px;}
+  .chip img{width:16px;height:16px;border-radius:3px;}
+  .chip.active{border-color:var(--gold);background:rgba(242,183,5,.12);color:var(--gold);font-weight:600;}
+  .chip.free-chip{border-style:dashed;}
+  details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:2px 16px;}
+  summary{cursor:pointer;padding:14px 0;font-size:14px;color:var(--text);display:flex;justify-content:space-between;list-style:none;}
+  summary::-webkit-details-marker{display:none;}
+  .filter-body{padding:2px 0 16px;}
+  .filter-row{margin-bottom:14px;}
+  .filter-row label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  select, input[type=text], input[type=password]{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;}
+  .check-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:8px;cursor:pointer;}
+  .check-row input{width:16px;height:16px;accent-color:var(--gold);}
+  .pick-btn{width:100%;background:var(--gold);color:#14151A;border:none;padding:16px;border-radius:10px;font-size:17px;font-weight:700;cursor:pointer;margin-top:6px;}
+  .pick-btn:active{transform:scale(.98);}
+  .pick-btn:disabled{opacity:.4;}
+  .result-card{margin-top:24px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;display:none;}
+  .result-card.show{display:block;animation:pop .35s ease;}
+  @keyframes pop{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  .result-top{display:flex;gap:14px;margin-bottom:14px;}
+  .result-poster{width:90px;height:135px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0;}
+  .platform-badge{display:inline-block;background:var(--rust);color:#fff;font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;margin:0 6px 6px 0;}
+  .platform-badge.free{background:#2E7D32;}
+  .result-title{font-size:21px;font-weight:700;margin:0 0 4px;line-height:1.2;}
+  .result-meta{color:var(--muted);font-size:13px;margin:0 0 8px;}
+  .result-detail{font-size:14px;margin:0 0 6px;}
+  .result-detail b{color:var(--muted);font-weight:600;}
+  .result-overview{font-size:13px;color:var(--text);line-height:1.5;margin-top:10px;}
+  .result-actions{display:flex;gap:10px;margin-top:18px;}
+  .action-btn{flex:1;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--text);}
+  .action-btn.primary{background:transparent;border:1px solid var(--gold);color:var(--gold);}
+  .pool-count{color:var(--muted);font-size:12px;margin-top:14px;text-align:center;min-height:16px;}
+  .note{font-size:11px;color:var(--muted);margin-top:30px;line-height:1.5;text-align:center;}
+  .note a{color:var(--muted);}
+  .setup-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:10px;}
+  .setup-card p{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 14px;}
+  .setup-card label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  .save-btn{width:100%;background:var(--gold);color:#14151A;border:none;padding:13px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px;}
+  .err{color:#e5786a;font-size:12px;margin-top:8px;}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--bg);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  .roulette-wrap{position:relative;height:150px;overflow:hidden;border-radius:10px;border:1px solid var(--line);background:#0E0F13;margin-top:16px;display:none;}
+  .roulette-wrap.show{display:block;}
+  .roulette-strip{position:absolute;top:0;left:0;height:100%;display:flex;align-items:center;gap:10px;padding:0;will-change:transform;}
+  .roulette-item{width:96px;height:132px;border-radius:6px;overflow:hidden;flex-shrink:0;border:2px solid var(--line);background:var(--surface2);}
+  .roulette-item img{width:100%;height:100%;object-fit:cover;display:block;}
+  .roulette-item.winner{border-color:var(--gold);box-shadow:0 0 16px rgba(242,183,5,.55);}
+  .roulette-indicator{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--gold);transform:translateX(-1px);z-index:2;box-shadow:0 0 10px var(--gold);}
+  .roulette-indicator::before,.roulette-indicator::after{content:"";position:absolute;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;}
+  .roulette-indicator::before{top:-1px;border-top:7px solid var(--gold);}
+  .roulette-indicator::after{bottom:-1px;border-bottom:7px solid var(--gold);}
+  .roulette-fade{position:absolute;top:0;bottom:0;width:60px;z-index:1;pointer-events:none;}
+  .roulette-fade.left{left:0;background:linear-gradient(90deg,#0E0F13,transparent);}
+  .roulette-fade.right{right:0;background:linear-gradient(270deg,#0E0F13,transparent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="marquee">Reel Roulette</h1>
+  <p class="subhead" id="subhead">Pick your services, add filters if you want, hit the button.</p>
+
+  <div id="setupSection" style="display:none;">
+    <div class="setup-card">
+      <p>Uses TMDB's live catalog data. Paste your TMDB API key (v3 auth) — it's saved privately to your own storage, never written into this file.</p>
+      <label>TMDB API key</label>
+      <input type="password" id="apiKeyInput" placeholder="Paste your TMDB API key">
+      <label style="margin-top:12px;">Region</label>
+      <select id="regionInput">
+        <option value="US">United States</option>
+        <option value="GB">United Kingdom</option>
+        <option value="CA">Canada</option>
+        <option value="AU">Australia</option>
+        <option value="DE">Germany</option>
+        <option value="FR">France</option>
+      </select>
+      <button class="save-btn" id="saveKeyBtn">Save & load catalog</button>
+      <p class="err" id="setupErr" style="display:none;"></p>
+    </div>
+  </div>
+
+  <div id="appSection" style="display:none;">
+    <div class="section">
+      <p class="section-title">Your subscriptions</p>
+      <div class="chips" id="platformChips"></div>
+    </div>
+
+    <div class="section">
+      <details id="filterBox">
+        <summary>Optional filters <span id="filterSummary" style="color:var(--muted);font-weight:400;"></span></summary>
+        <div class="filter-body">
+          <div class="filter-row">
+            <label>Cost</label>
+            <label class="check-row"><input type="checkbox" id="freeOnlyCheck"> Free only (no subscription needed)</label>
+            <label class="check-row"><input type="checkbox" id="primeIncludedCheck"> Included with Prime (skip extra-cost rentals)</label>
+          </div>
+          <div class="filter-row">
+            <label>Genre</label>
+            <select id="genreSelect"><option value="">Any</option></select>
+          </div>
+          <div class="filter-row">
+            <label>Decade</label>
+            <select id="decadeSelect">
+              <option value="">Any</option>
+              <option value="2020">2020s</option>
+              <option value="2010">2010s</option>
+              <option value="2000">2000s</option>
+              <option value="1990">1990s</option>
+              <option value="1980">1980s</option>
+              <option value="1970">1970s</option>
+            </select>
+          </div>
+          <div class="filter-row">
+            <label>An actor / actress in it</label>
+            <input type="text" id="starInput" placeholder="e.g. Denzel Washington">
+          </div>
+          <div class="filter-row">
+            <label>Max runtime</label>
+            <select id="runtimeSelect">
+              <option value="">Any</option>
+              <option value="100">Under 100 min</option>
+              <option value="120">Under 2 hours</option>
+              <option value="150">Under 2.5 hours</option>
+            </select>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <button class="pick-btn" id="pickBtn">🎬 Pick me a movie</button>
+    <p class="pool-count" id="poolCount"></p>
+
+    <div class="roulette-wrap" id="rouletteWrap">
+      <div class="roulette-fade left"></div>
+      <div class="roulette-fade right"></div>
+      <div class="roulette-indicator"></div>
+      <div class="roulette-strip" id="rouletteStrip"></div>
+    </div>
+
+    <div class="result-card" id="resultCard">
+      <div class="result-top">
+        <img class="result-poster" id="resPoster" src="" alt="">
+        <div>
+          <h2 class="result-title" id="resTitle"></h2>
+          <p class="result-meta" id="resMeta"></p>
+          <div id="resPlatforms"></div>
+        </div>
+      </div>
+      <p class="result-detail"><b>Genre:</b> <span id="resGenre"></span></p>
+      <p class="result-detail"><b>Starring:</b> <span id="resStars"></span></p>
+      <p class="result-overview" id="resOverview"></p>
+      <div class="result-actions">
+        <button class="action-btn" id="rerollBtn">Not feeling it</button>
+        <button class="action-btn primary" id="lockBtn">We're watching this</button>
+      </div>
+    </div>
+    <p class="pool-count" id="resultErr" style="display:none;"></p>
+  </div>
+
+  <p class="note">This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org/" target="_blank">themoviedb.org</a><br><span id="resetLink" style="text-decoration:underline;cursor:pointer;">Change API key / region</span></p>
+</div>
+
+<script>
+const KNOWN_PLATFORMS = [
+  {match:"netflix", label:"Netflix"},
+  {match:"amazon prime video", label:"Prime Video"},
+  {match:"disney plus", label:"Disney+"},
+  {match:"max", label:"Max"},
+  {match:"hulu", label:"Hulu"},
+  {match:"apple tv", label:"Apple TV+"},
+  {match:"paramount plus", label:"Paramount+"},
+  {match:"peacock", label:"Peacock"},
+  {match:"showtime", label:"Showtime"},
+  {match:"tubi", label:"Tubi"},
+  {match:"pluto tv", label:"Pluto TV"}
+];
+const FREE_LABELS = new Set(["Tubi","Pluto TV"]);
+const IMG_BASE = "https://image.tmdb.org/t/p/w300";
+
+let apiKey=null, region="US";
+let providers=[]; // {id,label,logo}
+let genres=[]; // {id,name}
+let selectedPlatformIds = new Set();
+let excludedIds = new Set();
+let personCache = {};
+
+const $=id=>document.getElementById(id);
+
+async function tmdb(path, params){
+  const url = new URL("https://api.themoviedb.org/3"+path);
+  url.searchParams.set("api_key", apiKey);
+  Object.entries(params||{}).forEach(([k,v])=>{ if(v!==undefined && v!=="") url.searchParams.set(k,v); });
+  const res = await fetch(url);
+  if(!res.ok){
+    if(res.status===401) throw new Error("That API key was rejected by TMDB — double check it and save again.");
+    throw new Error("TMDB request failed ("+res.status+").");
+  }
+  return res.json();
+}
+
+async function loadSavedSettings(){
+  const k = await safeStorageGet('tmdb-key');
+  const r = await safeStorageGet('tmdb-region');
+  if(k && k.value){
+    apiKey = k.value;
+    region = (r && r.value) || "US";
+    await initApp();
+    return;
+  }
+  $('setupSection').style.display='block';
+}
+
+$('saveKeyBtn').onclick = async ()=>{
+  const key = $('apiKeyInput').value.trim();
+  const reg = $('regionInput').value;
+  $('setupErr').style.display='none';
+  if(!key){ $('setupErr').textContent="Paste a key first."; $('setupErr').style.display='block'; return; }
+  $('saveKeyBtn').innerHTML='<span class="spin"></span>Checking key...';
+  try{
+    apiKey = key; region = reg;
+    await tmdb('/genre/movie/list',{}); // validate against TMDB, this must succeed
+    await safeStorageSet('tmdb-key', key);
+    await safeStorageSet('tmdb-region', reg);
+    $('setupSection').style.display='none';
+    await initApp();
+  }catch(e){
+    $('setupErr').textContent = e.message;
+    $('setupErr').style.display='block';
+    $('saveKeyBtn').textContent='Save & load catalog';
+  }
+};
+
+// Storage helpers: use the Claude artifact storage API (window.storage) when present,
+// otherwise fall back to localStorage (e.g. when hosted on GitHub Pages).
+// Never let a missing/broken storage API block using the app.
+// If neither works, settings just won't persist across reloads.
+let storageAvailable = true;
+const LS_PREFIX = 'reel-roulette:'; // namespaces keys on shared origins like *.github.io
+const hasArtifactStorage = ()=> typeof window.storage!=='undefined';
+async function safeStorageGet(key){
+  if(!storageAvailable) return null;
+  if(hasArtifactStorage()){
+    try{ return await window.storage.get(key); }
+    catch(e){ return null; }
+  }
+  try{
+    const v = localStorage.getItem(LS_PREFIX+key);
+    return v===null ? null : {value:v};
+  }catch(e){ storageAvailable=false; return null; }
+}
+async function safeStorageSet(key,val){
+  try{
+    if(hasArtifactStorage()) await window.storage.set(key,val);
+    else localStorage.setItem(LS_PREFIX+key, val);
+  }catch(e){ storageAvailable=false; }
+}
+async function safeStorageDelete(key){
+  try{
+    if(hasArtifactStorage()) await window.storage.delete(key);
+    else localStorage.removeItem(LS_PREFIX+key);
+  }catch(e){}
+}
+
+$('resetLink').onclick = async ()=>{
+  await safeStorageDelete('tmdb-key');
+  location.reload();
+};
+
+async function initApp(){
+  $('appSection').style.display='block';
+  $('subhead').textContent="Live catalog for region "+region+".";
+  if(!storageAvailable){
+    $('subhead').textContent += " (Your key isn't persisting between reloads in this environment — you'll need to re-paste it next time.)";
+  }
+  try{
+    const [genreData, providerData] = await Promise.all([
+      tmdb('/genre/movie/list',{}),
+      tmdb('/watch/providers/movie',{watch_region:region})
+    ]);
+    genres = genreData.genres;
+    const seen = new Set();
+    providers = [];
+    KNOWN_PLATFORMS.forEach(kp=>{
+      const found = providerData.results.find(p=>p.provider_name.toLowerCase().includes(kp.match) && !seen.has(kp.label));
+      if(found){ seen.add(kp.label); providers.push({id:found.provider_id, label:kp.label, logo:found.logo_path}); }
+    });
+    buildGenreOptions();
+    buildPlatformChips();
+    updatePoolCount();
+  }catch(e){
+    $('appSection').innerHTML = '<p class="err">Couldn\'t load TMDB catalog: '+e.message+'</p>';
+  }
+}
+
+function buildGenreOptions(){
+  const sel=$('genreSelect');
+  genres.sort((a,b)=>a.name.localeCompare(b.name)).forEach(g=>{
+    const o=document.createElement('option'); o.value=g.id; o.textContent=g.name; sel.appendChild(o);
+  });
+}
+
+function buildPlatformChips(){
+  const wrap=$('platformChips'); wrap.innerHTML='';
+  providers.forEach(p=>{
+    const c=document.createElement('div');
+    c.className='chip'+(FREE_LABELS.has(p.label)?' free-chip':'');
+    c.innerHTML = (p.logo? '<img src="https://image.tmdb.org/t/p/w45'+p.logo+'">':'') + p.label + (FREE_LABELS.has(p.label)?' (free)':'');
+    c.onclick=()=>{
+      if(selectedPlatformIds.has(p.id)){ selectedPlatformIds.delete(p.id); c.classList.remove('active'); }
+      else{ selectedPlatformIds.add(p.id); c.classList.add('active'); }
+      saveSelectedPlatforms();
+      updatePoolCount();
+    };
+    c.dataset.id=p.id;
+    wrap.appendChild(c);
+  });
+  loadSelectedPlatforms();
+}
+
+async function saveSelectedPlatforms(){
+  await safeStorageSet('selected-provider-ids', JSON.stringify([...selectedPlatformIds]));
+}
+async function loadSelectedPlatforms(){
+  const res = await safeStorageGet('selected-provider-ids');
+  if(res && res.value){
+    try{
+      JSON.parse(res.value).forEach(id=>{
+        selectedPlatformIds.add(id);
+        const chip=[...$('platformChips').children].find(c=>Number(c.dataset.id)===Number(id));
+        if(chip) chip.classList.add('active');
+      });
+    }catch(e){}
+  }
+  updatePoolCount();
+}
+
+async function resolvePersonId(name){
+  if(!name) return null;
+  if(personCache[name]) return personCache[name];
+  const data = await tmdb('/search/person',{query:name});
+  const id = data.results && data.results[0] ? data.results[0].id : null;
+  personCache[name]=id;
+  return id;
+}
+
+function currentMonetization(){
+  if($('freeOnlyCheck').checked) return "free,ads";
+  return "flatrate";
+}
+
+async function buildDiscoverParams(){
+  const params = { watch_region: region, sort_by:"popularity.desc", "vote_count.gte":50 };
+  const primeIncluded = $('primeIncludedCheck').checked;
+  if(primeIncluded){
+    const prime = providers.find(p=>p.label==="Prime Video");
+    if(prime) params.with_watch_providers = prime.id;
+    params.with_watch_monetization_types = "flatrate";
+  } else {
+    if(selectedPlatformIds.size) params.with_watch_providers = [...selectedPlatformIds].join('|');
+    params.with_watch_monetization_types = currentMonetization();
+  }
+  if($('genreSelect').value) params.with_genres = $('genreSelect').value;
+  if($('decadeSelect').value){
+    const d = Number($('decadeSelect').value);
+    params["primary_release_date.gte"] = d+"-01-01";
+    params["primary_release_date.lte"] = (d+9)+"-12-31";
+  }
+  if($('runtimeSelect').value) params["with_runtime.lte"] = $('runtimeSelect').value;
+  const starName = $('starInput').value.trim();
+  if(starName){
+    const pid = await resolvePersonId(starName);
+    if(pid) params.with_cast = pid; else params.with_cast = "0"; // no match -> empty pool
+  }
+  return params;
+}
+
+let debounceTimer;
+function updatePoolCount(){
+  clearTimeout(debounceTimer);
+  const el=$('poolCount');
+  if(selectedPlatformIds.size===0 && !$('primeIncludedCheck').checked){
+    el.textContent="Pick at least one subscription.";
+    $('pickBtn').disabled=false;
+    updateFilterSummary();
+    return;
+  }
+  el.textContent="Checking live catalog...";
+  debounceTimer = setTimeout(async ()=>{
+    try{
+      const params = await buildDiscoverParams();
+      const data = await tmdb('/discover/movie', {...params, page:1});
+      el.textContent = (data.total_results||0)+" movies match right now.";
+      $('pickBtn').disabled = !data.total_results;
+    }catch(e){
+      el.textContent = "Couldn't check catalog: "+e.message;
+    }
+  }, 450);
+  updateFilterSummary();
+}
+function updateFilterSummary(){
+  const rtText = $('runtimeSelect').selectedOptions[0].text;
+  const active=[
+    $('genreSelect').selectedOptions[0] && $('genreSelect').value ? $('genreSelect').selectedOptions[0].text:"",
+    $('decadeSelect').value ? $('decadeSelect').selectedOptions[0].text:"",
+    $('starInput').value,
+    rtText!=="Any"?rtText:"",
+    $('freeOnlyCheck').checked?"Free only":"",
+    $('primeIncludedCheck').checked?"Prime included":""
+  ].filter(Boolean);
+  $('filterSummary').textContent = active.length ? "("+active.length+" set)" : "";
+}
+['genreSelect','decadeSelect','runtimeSelect'].forEach(id=>$(id).addEventListener('change',updatePoolCount));
+$('starInput').addEventListener('input',updatePoolCount);
+$('freeOnlyCheck').addEventListener('change',updatePoolCount);
+$('primeIncludedCheck').addEventListener('change',updatePoolCount);
+
+// Fetches a random page plus page 1 for variety, picks a winner, and returns
+// enough poster thumbnails to build the spinning strip.
+async function pickRandomMovieWithPool(){
+  const params = await buildDiscoverParams();
+  const first = await tmdb('/discover/movie', {...params, page:1});
+  if(!first.total_results) return null;
+  const maxPage = Math.min(first.total_pages||1, 500);
+  const page = 1 + Math.floor(Math.random()*maxPage);
+  const extra = page===1 ? first : await tmdb('/discover/movie', {...params, page});
+  const seen = new Set();
+  const combined = [];
+  [...first.results, ...extra.results].forEach(m=>{
+    if(!seen.has(m.id) && m.poster_path && !excludedIds.has(m.id)){ seen.add(m.id); combined.push(m); }
+  });
+  if(!combined.length) return null;
+  const winner = combined[Math.floor(Math.random()*combined.length)];
+  return {winner, pool: combined};
+}
+
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+const ITEM_W = 106; // 96px item + 10px gap, must match CSS
+const TARGET_INDEX = 46; // where the winner lands in the built strip
+
+function buildStrip(pool, winner){
+  let strip = [];
+  while(strip.length < TARGET_INDEX + 6){ strip = strip.concat(shuffle(pool)); }
+  strip = strip.slice(0, TARGET_INDEX + 6);
+  strip[TARGET_INDEX] = winner;
+  return strip;
+}
+
+async function spinToMovie(){
+  const rouletteWrap = $('rouletteWrap');
+  const strip = $('rouletteStrip');
+  $('resultCard').classList.remove('show');
+  $('resultErr').style.display='none';
+
+  const result = await pickRandomMovieWithPool();
+  if(!result) return null;
+  const { winner, pool } = result;
+  const items = buildStrip(pool, winner);
+
+  strip.innerHTML = items.map((m,i)=>
+    '<div class="roulette-item" data-i="'+i+'"><img src="'+IMG_BASE+m.poster_path+'" loading="lazy"></div>'
+  ).join('');
+  strip.style.transition = 'none';
+  strip.style.transform = 'translateX(0px)';
+  rouletteWrap.classList.add('show');
+
+  // force reflow so the browser registers the reset position before animating
+  void strip.offsetWidth;
+
+  const viewportWidth = rouletteWrap.offsetWidth;
+  const targetX = -(TARGET_INDEX*ITEM_W + ITEM_W/2 - viewportWidth/2);
+
+  await new Promise(resolve=>{
+    requestAnimationFrame(()=>{
+      strip.style.transition = 'transform 4.2s cubic-bezier(0.1,0.82,0.18,1)';
+      strip.style.transform = 'translateX('+targetX+'px)';
+    });
+    strip.addEventListener('transitionend', function handler(){
+      strip.removeEventListener('transitionend', handler);
+      resolve();
+    }, {once:true});
+  });
+
+  const winnerEl = strip.querySelector('[data-i="'+TARGET_INDEX+'"]');
+  if(winnerEl) winnerEl.classList.add('winner');
+
+  return winner;
+}
+
+async function renderMovie(movieStub){
+  const [details, watchData] = await Promise.all([
+    tmdb('/movie/'+movieStub.id, {append_to_response:'credits'}),
+    tmdb('/movie/'+movieStub.id+'/watch/providers', {})
+  ]);
+  const regionWatch = (watchData.results && watchData.results[region]) || {};
+  const badges = [];
+  (regionWatch.flatrate||[]).forEach(p=> badges.push({label:p.provider_name, free:false}));
+  (regionWatch.free||[]).forEach(p=> badges.push({label:p.provider_name, free:true}));
+  (regionWatch.ads||[]).forEach(p=> badges.push({label:p.provider_name, free:true}));
+
+  $('resPoster').src = details.poster_path ? IMG_BASE+details.poster_path : '';
+  $('resTitle').textContent = details.title;
+  $('resMeta').textContent = (details.release_date? details.release_date.slice(0,4):"—") + (details.runtime? " · "+details.runtime+" min":"");
+  $('resGenre').textContent = details.genres.map(g=>g.name).join(", ") || "—";
+  $('resStars').textContent = (details.credits.cast||[]).slice(0,3).map(c=>c.name).join(", ") || "—";
+  $('resOverview').textContent = details.overview || "";
+  $('resPlatforms').innerHTML = badges.length ? badges.map(b=>'<span class="platform-badge'+(b.free?' free':'')+'">'+b.label+(b.free?' · Free':'')+'</span>').join('') : '<span class="platform-badge">Check availability</span>';
+  $('resultCard').classList.add('show');
+  $('resultErr').style.display='none';
+}
+
+$('pickBtn').onclick = async ()=>{
+  excludedIds.clear();
+  $('pickBtn').disabled=true;
+  $('pickBtn').textContent='Spinning...';
+  try{
+    const movie = await spinToMovie();
+    if(!movie){ $('resultErr').textContent="No matches — try loosening a filter."; $('resultErr').style.display='block'; }
+    else{ await renderMovie(movie); window.__lastMovie=movie; }
+  }catch(e){
+    $('resultErr').textContent = e.message; $('resultErr').style.display='block';
+  }
+  $('pickBtn').disabled=false;
+  $('pickBtn').textContent='🎬 Pick me a movie';
+};
+
+$('rerollBtn').onclick = async ()=>{
+  if(window.__lastMovie) excludedIds.add(window.__lastMovie.id);
+  $('rerollBtn').disabled=true;
+  $('rerollBtn').textContent='Spinning...';
+  try{
+    const movie = await spinToMovie();
+    if(!movie){ $('resultErr').textContent="No more matches — try loosening a filter."; $('resultErr').style.display='block'; }
+    else{ await renderMovie(movie); window.__lastMovie=movie; }
+  }catch(e){
+    $('resultErr').textContent = e.message; $('resultErr').style.display='block';
+  }
+  $('rerollBtn').disabled=false;
+  $('rerollBtn').textContent='Not feeling it';
+};
+
+$('lockBtn').onclick = ()=>{
+  const orig=$('lockBtn').textContent;
+  $('lockBtn').textContent="Enjoy the movie";
+  setTimeout(()=>$('lockBtn').textContent=orig,1800);
+};
+
+loadSavedSettings();
+</script>
+</body>
+</html>
