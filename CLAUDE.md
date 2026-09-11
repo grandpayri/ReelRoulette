@@ -28,6 +28,8 @@ The whole app is one self-contained file, `index.html`, with inline CSS and vani
 
 **Picking:** `pickRandomMovieWithPool()` fetches page 1 plus one random page (capped at 500, TMDB's page limit). It merges them, dedupes, drops movies without posters and movies in `excludedIds`, and picks a random winner. The main pick button clears `excludedIds`. "Not feeling it" adds the current movie (`window.__lastMovie`) to it before spinning again.
 
+**Views:** the "Spin the wheel" button hides `#pickerControls` (subscriptions, filters, button, pool count), leaving only the wheel and the result. The "← Spin again" link (`showPicker()`) brings the controls back. The link stays hidden while a spin is running.
+
 **Roulette animation:** `buildStrip()` fills a strip with shuffled pool posters and places the winner at `TARGET_INDEX`. `spinToMovie()` then uses a CSS transform transition to translate the strip until that index sits under the center indicator. `ITEM_W` (106) must equal `.roulette-item` width (96px) plus the `.roulette-strip` gap (10px). If you change the CSS without updating it, the spin stops off-center.
 
 **Result card:** `renderMovie()` fetches `/movie/{id}?append_to_response=credits` and `/movie/{id}/watch/providers`, and builds platform badges from the region's `flatrate`, `free`, and `ads` lists.

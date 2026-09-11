@@ -49,6 +49,9 @@
   .action-btn{flex:1;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--text);}
   .action-btn.primary{background:transparent;border:1px solid var(--gold);color:var(--gold);}
   .pool-count{color:var(--muted);font-size:12px;margin-top:14px;text-align:center;min-height:16px;}
+  [hidden]{display:none !important;}
+  .back-link{background:none;border:none;padding:0;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer;}
+  .back-link:hover{text-decoration:underline;}
   .note{font-size:11px;color:var(--muted);margin-top:30px;line-height:1.5;text-align:center;}
   .note a{color:var(--muted);}
   .setup-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:10px;}
@@ -98,6 +101,7 @@
   </div>
 
   <div id="appSection" style="display:none;">
+    <div id="pickerControls">
     <div class="section">
       <p class="section-title">Your subscriptions</p>
       <div class="chips" id="platformChips"></div>
@@ -145,8 +149,11 @@
       </details>
     </div>
 
-    <button class="pick-btn" id="pickBtn">🎬 Pick me a movie</button>
+    <button class="pick-btn" id="pickBtn">🎬 Spin the wheel</button>
     <p class="pool-count" id="poolCount"></p>
+    </div>
+
+    <button class="back-link" id="backLink" hidden>← Spin again</button>
 
     <div class="roulette-wrap" id="rouletteWrap">
       <div class="roulette-fade left"></div>
@@ -531,10 +538,23 @@ async function renderMovie(movieStub){
   $('resultErr').style.display='none';
 }
 
+// Two views: the picker controls (subscriptions, filters, spin button), and the
+// spin/result view, which hides the controls and offers a "Spin again" link back.
+function showPicker(){
+  $('pickerControls').hidden=false;
+  $('backLink').hidden=true;
+  $('rouletteWrap').classList.remove('show');
+  $('resultCard').classList.remove('show');
+  $('resultErr').style.display='none';
+  window.scrollTo({top:0});
+}
+$('backLink').onclick = showPicker;
+
 $('pickBtn').onclick = async ()=>{
   excludedIds.clear();
   $('pickBtn').disabled=true;
   $('pickBtn').textContent='Spinning...';
+  $('pickerControls').hidden=true;
   try{
     const movie = await spinToMovie();
     if(!movie){ $('resultErr').textContent="No matches — try loosening a filter."; $('resultErr').style.display='block'; }
@@ -542,14 +562,16 @@ $('pickBtn').onclick = async ()=>{
   }catch(e){
     $('resultErr').textContent = e.message; $('resultErr').style.display='block';
   }
+  $('backLink').hidden=false;
   $('pickBtn').disabled=false;
-  $('pickBtn').textContent='🎬 Pick me a movie';
+  $('pickBtn').textContent='🎬 Spin the wheel';
 };
 
 $('rerollBtn').onclick = async ()=>{
   if(window.__lastMovie) excludedIds.add(window.__lastMovie.id);
   $('rerollBtn').disabled=true;
   $('rerollBtn').textContent='Spinning...';
+  $('backLink').hidden=true; // don't allow leaving mid-spin
   try{
     const movie = await spinToMovie();
     if(!movie){ $('resultErr').textContent="No more matches — try loosening a filter."; $('resultErr').style.display='block'; }
@@ -557,6 +579,7 @@ $('rerollBtn').onclick = async ()=>{
   }catch(e){
     $('resultErr').textContent = e.message; $('resultErr').style.display='block';
   }
+  $('backLink').hidden=false;
   $('rerollBtn').disabled=false;
   $('rerollBtn').textContent='Not feeling it';
 };
