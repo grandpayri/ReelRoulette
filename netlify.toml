@@ -1,0 +1,6 @@
+# Netlify runs the TMDB proxy function in netlify/functions/tmdb.mjs, which
+# needs the TMDB_API_KEY environment variable set in the Netlify UI.
+# The app itself is served from GitHub Pages; Netlify also publishes the
+# static files as-is (no build step).
+[build]
+  publish = "."

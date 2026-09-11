@@ -97,21 +97,11 @@
   <p class="subhead" id="subhead">Pick your services, add filters if you want, hit the button.</p>
 
   <div id="setupSection" style="display:none;">
+    <button class="back-link" id="settingsBack" hidden>← Back</button>
     <div class="setup-card">
-      <p>Uses live catalog data from The Movie Database (TMDB). Paste your TMDB API key below — it's saved privately to your own storage and only ever sent to TMDB.</p>
-      <div class="key-help">
-        <p class="key-help-title">Don't have a key? It's free:</p>
-        <ol>
-          <li>Create a free account at <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org</a> and confirm your email.</li>
-          <li>Go to <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Settings → API</a> and request an API key. Choose personal use and fill out the short form.</li>
-          <li>Copy the <b>API Key</b> (the short one), not the long "API Read Access Token", and paste it below.</li>
-        </ol>
-        <p class="key-help-note">TMDB's sign-up form works best on a computer.</p>
-      </div>
-      <label>TMDB API key</label>
-      <input type="password" id="apiKeyInput" placeholder="Paste your TMDB API key">
-      <label style="margin-top:12px;">Region</label>
-      <select id="regionInput">
+      <p id="setupIntro"></p>
+      <label>Region</label>
+      <select id="regionInput" style="margin-bottom:16px;">
         <option value="US">United States</option>
         <option value="GB">United Kingdom</option>
         <option value="CA">Canada</option>
@@ -119,12 +109,24 @@
         <option value="DE">Germany</option>
         <option value="FR">France</option>
       </select>
+      <div class="key-help">
+        <p class="key-help-title" id="keyHelpTitle">Don't have a key? It's free:</p>
+        <ol>
+          <li>Create a free account at <a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org</a> and confirm your email.</li>
+          <li>Go to <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">Settings → API</a> and request an API key. Choose personal use and fill out the short form.</li>
+          <li>Copy the <b>API Key</b> (the short one), not the long "API Read Access Token", and paste it below.</li>
+        </ol>
+        <p class="key-help-note">TMDB's sign-up form works best on a computer.</p>
+      </div>
+      <label id="apiKeyLabel">TMDB API key</label>
+      <input type="password" id="apiKeyInput" placeholder="Paste your TMDB API key">
       <button class="save-btn" id="saveKeyBtn">Save & load catalog</button>
       <p class="err" id="setupErr" style="display:none;"></p>
     </div>
   </div>
 
   <div id="appSection" style="display:none;">
+    <p class="err" id="loadErr" hidden></p>
     <div id="pickerControls">
     <div class="section">
       <p class="section-title">What are we watching?</p>
@@ -216,7 +218,7 @@
     <p class="pool-count" id="resultErr" style="display:none;"></p>
   </div>
 
-  <p class="note">This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org/" target="_blank">themoviedb.org</a><br><span id="resetLink" style="text-decoration:underline;cursor:pointer;">Change API key / region</span></p>
+  <p class="note">This product uses the TMDB API but is not endorsed or certified by TMDB. <a href="https://www.themoviedb.org/" target="_blank">themoviedb.org</a><br><span id="resetLink" style="text-decoration:underline;cursor:pointer;">Settings: region / your own API key</span></p>
 </div>
 
 <script>
@@ -273,14 +275,28 @@ let personCache = {};
 
 const $=id=>document.getElementById(id);
 
+// Visitors without their own key go through the shared Netlify proxy
+// (netlify/functions/tmdb.mjs), which adds the key server-side. Empty = no proxy,
+// so a personal key is required.
+const RELAY_URL = "";
+const usingRelay = ()=> !apiKey && !!RELAY_URL;
+
 async function tmdb(path, params){
-  const url = new URL("https://api.themoviedb.org/3"+path);
-  url.searchParams.set("api_key", apiKey);
+  const relay = usingRelay();
+  const url = new URL((relay ? RELAY_URL : "https://api.themoviedb.org/3")+path);
+  if(!relay) url.searchParams.set("api_key", apiKey);
   Object.entries(params||{}).forEach(([k,v])=>{ if(v!==undefined && v!=="") url.searchParams.set(k,v); });
-  const res = await fetch(url);
+  let res;
+  try{ res = await fetch(url); }
+  catch(e){
+    // Netlify's rate-limit 429 has no CORS headers, so it surfaces here as a network error.
+    throw new Error(relay ? "Couldn't reach the shared connection. If you've been spinning a lot, wait a minute and try again."
+                          : "Couldn't reach TMDB. Check your connection.");
+  }
   if(!res.ok){
-    if(res.status===401) throw new Error("That API key was rejected by TMDB — double check it and save again.");
-    throw new Error("TMDB request failed ("+res.status+").");
+    if(res.status===429) throw new Error("Too many requests. Wait a minute and try again.");
+    if(res.status===401 && !relay) throw new Error("That API key was rejected by TMDB — double check it and save again.");
+    throw new Error((relay ? "Shared connection" : "TMDB")+" request failed ("+res.status+").");
   }
   return res.json();
 }
@@ -288,33 +304,47 @@ async function tmdb(path, params){
 async function loadSavedSettings(){
   const k = await safeStorageGet('tmdb-key');
   const r = await safeStorageGet('tmdb-region');
-  if(k && k.value){
-    apiKey = k.value;
-    region = (r && r.value) || "US";
-    await initApp();
-    return;
-  }
+  region = (r && r.value) || "US";
+  if(k && k.value) apiKey = k.value;
+  if(apiKey || RELAY_URL){ await initApp(); return; }
+  showSettings();
+}
+
+function showSettings(){
+  $('appSection').style.display='none';
   $('setupSection').style.display='block';
+  $('regionInput').value = region;
+  $('apiKeyInput').value = apiKey || '';
+  $('settingsBack').hidden = !(apiKey || RELAY_URL); // nothing to go back to on a first-run setup
+  $('apiKeyLabel').textContent = RELAY_URL ? 'Your own TMDB API key (optional)' : 'TMDB API key';
+  $('keyHelpTitle').textContent = RELAY_URL ? "Want your own key? It's free:" : "Don't have a key? It's free:";
+  $('setupIntro').textContent = RELAY_URL
+    ? "Reel Roulette works without a key through a shared connection. If that's busy or down, you can use your own free TMDB API key instead. Leave the key blank to use the shared connection. A key you add is saved privately to your own storage and only ever sent to TMDB."
+    : "Uses live catalog data from The Movie Database (TMDB). Paste your TMDB API key below — it's saved privately to your own storage and only ever sent to TMDB.";
+  $('setupErr').style.display='none';
 }
 
 $('saveKeyBtn').onclick = async ()=>{
   const key = $('apiKeyInput').value.trim();
   const reg = $('regionInput').value;
   $('setupErr').style.display='none';
-  if(!key){ $('setupErr').textContent="Paste a key first."; $('setupErr').style.display='block'; return; }
+  if(!key && !RELAY_URL){ $('setupErr').textContent="Paste a key first."; $('setupErr').style.display='block'; return; }
   if(key.startsWith('eyJ')){ // v4 read access tokens are JWTs; this app uses the v3 api_key param
     $('setupErr').textContent="That looks like the API Read Access Token. Paste the shorter API Key instead.";
     $('setupErr').style.display='block'; return;
   }
-  $('saveKeyBtn').innerHTML='<span class="spin"></span>Checking key...';
+  $('saveKeyBtn').innerHTML='<span class="spin"></span>Checking...';
+  const prevKey = apiKey;
   try{
-    apiKey = key; region = reg;
-    await tmdb('/genre/movie/list',{}); // validate against TMDB, this must succeed
-    await safeStorageSet('tmdb-key', key);
+    apiKey = key || null; region = reg;
+    await tmdb('/genre/movie/list',{}); // validate the key (or the proxy), this must succeed
+    if(key) await safeStorageSet('tmdb-key', key); else await safeStorageDelete('tmdb-key');
     await safeStorageSet('tmdb-region', reg);
     $('setupSection').style.display='none';
+    $('saveKeyBtn').textContent='Save & load catalog';
     await initApp();
   }catch(e){
+    apiKey = prevKey;
     $('setupErr').textContent = e.message;
     $('setupErr').style.display='block';
     $('saveKeyBtn').textContent='Save & load catalog';
@@ -352,15 +382,19 @@ async function safeStorageDelete(key){
   }catch(e){}
 }
 
-$('resetLink').onclick = async ()=>{
-  await safeStorageDelete('tmdb-key');
-  location.reload();
+$('resetLink').onclick = showSettings;
+$('settingsBack').onclick = ()=>{
+  $('setupSection').style.display='none';
+  $('appSection').style.display='block';
 };
 
+// Safe to call again after changing settings: every step rebuilds its own UI.
 async function initApp(){
   $('appSection').style.display='block';
+  showPicker();
+  $('loadErr').hidden=true;
   $('subhead').textContent="Live catalog for region "+region+".";
-  if(!storageAvailable){
+  if(!storageAvailable && apiKey){
     $('subhead').textContent += " (Your key isn't persisting between reloads in this environment — you'll need to re-paste it next time.)";
   }
   try{
@@ -383,7 +417,11 @@ async function initApp(){
     buildPlatformChips();
     updatePoolCount();
   }catch(e){
-    $('appSection').innerHTML = '<p class="err">Couldn\'t load TMDB catalog: '+e.message+'</p>';
+    // Keep the DOM intact so initApp() can run again after fixing settings.
+    $('pickerControls').hidden=true;
+    $('loadErr').textContent = "Couldn't load TMDB catalog: "+e.message +
+      (usingRelay() ? " You can also use your own free TMDB key under Settings below." : "");
+    $('loadErr').hidden=false;
   }
 }
 
