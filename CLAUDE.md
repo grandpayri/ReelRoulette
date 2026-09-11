@@ -38,7 +38,7 @@ The API key must never be hard-coded into the file, since the repo is public.
 
 **Picking:** `pickRandomMovieWithPool()` fetches page 1 plus one random page (capped at 500, TMDB's page limit). It merges them, dedupes, drops titles without posters, titles in `excludedIds`, and seen titles (`isHiddenSeen()`), then picks a random winner. Discover can't exclude IDs on the server, so if everything gets filtered out it tries up to 3 more random pages. The live pool count doesn't subtract seen titles.
 - `excludedIds` holds session-only skips. The main spin button clears it, and "Not feeling it" adds the current title (`window.__lastMovie`) before spinning again.
-- `seenKeys` is the persisted "Seen it" list. Keys are prefixed with the media type because movie and TV IDs overlap. "Seen it" adds the current title, spins again through `respin()`, and then shows an Undo note in `#seenNote`. "Clear my seen list" uses a two-tap confirm instead of `confirm()`, which sandboxed artifact iframes can block.
+- `seenKeys` is the persisted "Seen it" list. Keys are prefixed with the media type because movie and TV IDs overlap. Both "Seen it" and "We're watching this" add the current title through `markSeen()`, which shows an Undo note in `#seenNote`. "Seen it" also spins again through `respin()`. "Clear my seen list" uses a two-tap confirm instead of `confirm()`, which sandboxed artifact iframes can block.
 
 **Views:** the "Spin the wheel" button hides `#pickerControls` (mode toggle, subscriptions, filters, button, pool count), leaving only the wheel and the result. The "← Spin again" link (`showPicker()`) brings the controls back. The link stays hidden while a spin is running, so the mode can't change mid-result.
 

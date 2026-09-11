@@ -691,21 +691,29 @@ $('rerollBtn').onclick = ()=>{
   respin($('rerollBtn'));
 };
 
-$('seenBtn').onclick = async ()=>{
-  const m = window.__lastMovie;
-  if(!m) return;
+// Adds the title to the seen list and returns a function that shows the Undo note.
+function markSeen(m){
   const key = seenKey(m);
   seenKeys.add(key);
   saveSeen();
+  return ()=>{
+    $('seenNote').innerHTML = '';
+    $('seenNote').append('Marked "'+(m.title||m.name)+'" as seen.');
+    const undo = document.createElement('button');
+    undo.className='back-link'; undo.textContent='Undo';
+    undo.onclick = ()=>{ seenKeys.delete(key); saveSeen(); $('seenNote').hidden=true; };
+    $('seenNote').append(undo);
+    $('seenNote').hidden=false;
+  };
+}
+
+$('seenBtn').onclick = async ()=>{
+  const m = window.__lastMovie;
+  if(!m) return;
+  const showNote = markSeen(m);
   $('seenNote').hidden=true;
   await respin($('seenBtn'));
-  $('seenNote').innerHTML = '';
-  $('seenNote').append('Marked "'+(m.title||m.name)+'" as seen.');
-  const undo = document.createElement('button');
-  undo.className='back-link'; undo.textContent='Undo';
-  undo.onclick = ()=>{ seenKeys.delete(key); saveSeen(); $('seenNote').hidden=true; };
-  $('seenNote').append(undo);
-  $('seenNote').hidden=false;
+  showNote();
 };
 
 // Seen list: persisted as "movie:123" / "tv:456" keys, since movie and TV ids overlap.
@@ -739,10 +747,11 @@ $('clearSeenBtn').onclick = ()=>{
   saveSeen();
 };
 
+// Locking in a pick also adds it to the seen list so it won't come up again.
 $('lockBtn').onclick = ()=>{
-  const orig=$('lockBtn').textContent;
+  if(window.__lastMovie) markSeen(window.__lastMovie)();
   $('lockBtn').textContent=MEDIA[mediaType].enjoy;
-  setTimeout(()=>$('lockBtn').textContent=orig,1800);
+  setTimeout(()=>$('lockBtn').textContent="We're watching this",1800);
 };
 
 loadSavedSettings();
