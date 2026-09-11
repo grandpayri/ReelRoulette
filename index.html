@@ -21,6 +21,9 @@
   .chip img{width:16px;height:16px;border-radius:3px;}
   .chip.active{border-color:var(--gold);background:rgba(242,183,5,.12);color:var(--gold);font-weight:600;}
   .chip.free-chip{border-style:dashed;}
+  .mode-toggle{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px;}
+  .mode-btn{flex:1;background:none;border:none;color:var(--muted);padding:10px;border-radius:7px;font-size:14px;font-weight:600;cursor:pointer;}
+  .mode-btn.active{background:rgba(242,183,5,.12);color:var(--gold);}
   details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:2px 16px;}
   summary{cursor:pointer;padding:14px 0;font-size:14px;color:var(--text);display:flex;justify-content:space-between;list-style:none;}
   summary::-webkit-details-marker{display:none;}
@@ -45,13 +48,16 @@
   .result-detail{font-size:14px;margin:0 0 6px;}
   .result-detail b{color:var(--muted);font-weight:600;}
   .result-overview{font-size:13px;color:var(--text);line-height:1.5;margin-top:10px;}
-  .result-actions{display:flex;gap:10px;margin-top:18px;}
-  .action-btn{flex:1;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--text);}
+  .result-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px;}
+  .result-actions .primary{grid-column:1/-1;}
+  .action-btn{padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--surface2);color:var(--text);}
   .action-btn.primary{background:transparent;border:1px solid var(--gold);color:var(--gold);}
   .pool-count{color:var(--muted);font-size:12px;margin-top:14px;text-align:center;min-height:16px;}
   [hidden]{display:none !important;}
   .back-link{background:none;border:none;padding:0;color:var(--gold);font-size:14px;font-weight:600;cursor:pointer;}
   .back-link:hover{text-decoration:underline;}
+  #clearSeenBtn{font-size:12px;font-weight:400;margin-top:2px;}
+  #seenNote .back-link{font-size:12px;margin-left:4px;}
   .note{font-size:11px;color:var(--muted);margin-top:30px;line-height:1.5;text-align:center;}
   .note a{color:var(--muted);}
   .setup-card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:10px;}
@@ -119,6 +125,14 @@
   <div id="appSection" style="display:none;">
     <div id="pickerControls">
     <div class="section">
+      <p class="section-title">What are we watching?</p>
+      <div class="mode-toggle" id="modeToggle">
+        <button class="mode-btn active" data-mode="movie">🎬 Movie</button>
+        <button class="mode-btn" data-mode="tv">📺 Binge a show</button>
+      </div>
+    </div>
+
+    <div class="section">
       <p class="section-title">Your subscriptions</p>
       <div class="chips" id="platformChips"></div>
     </div>
@@ -148,18 +162,18 @@
               <option value="1970">1970s</option>
             </select>
           </div>
-          <div class="filter-row">
+          <div class="filter-row" id="starRow">
             <label>An actor / actress in it</label>
             <input type="text" id="starInput" placeholder="e.g. Denzel Washington">
           </div>
           <div class="filter-row">
-            <label>Max runtime</label>
-            <select id="runtimeSelect">
-              <option value="">Any</option>
-              <option value="100">Under 100 min</option>
-              <option value="120">Under 2 hours</option>
-              <option value="150">Under 2.5 hours</option>
-            </select>
+            <label id="runtimeLabel">Max runtime</label>
+            <select id="runtimeSelect"><option value="">Any</option></select>
+          </div>
+          <div class="filter-row">
+            <label>Already seen</label>
+            <label class="check-row"><input type="checkbox" id="hideSeenCheck" checked> Skip ones I've marked as seen <span id="seenCount" style="color:var(--muted);"></span></label>
+            <button class="back-link" id="clearSeenBtn" hidden>Clear my seen list</button>
           </div>
         </div>
       </details>
@@ -192,9 +206,11 @@
       <p class="result-overview" id="resOverview"></p>
       <div class="result-actions">
         <button class="action-btn" id="rerollBtn">Not feeling it</button>
+        <button class="action-btn" id="seenBtn">👁 Seen it</button>
         <button class="action-btn primary" id="lockBtn">We're watching this</button>
       </div>
     </div>
+    <p class="pool-count" id="seenNote" hidden></p>
     <p class="pool-count" id="resultErr" style="display:none;"></p>
   </div>
 
@@ -218,11 +234,22 @@ const KNOWN_PLATFORMS = [
 const FREE_LABELS = new Set(["Tubi","Pluto TV"]);
 const IMG_BASE = "https://image.tmdb.org/t/p/w300";
 
+// Per-mode settings. The keys are TMDB media types, used directly in API paths
+// (/discover/movie vs /discover/tv, /movie/{id} vs /tv/{id}).
+const MEDIA = {
+  movie:{ plural:"movies", dateField:"primary_release_date", enjoy:"Enjoy the movie",
+    runtimeLabel:"Max runtime", runtimes:[[100,"Under 100 min"],[120,"Under 2 hours"],[150,"Under 2.5 hours"]] },
+  tv:{ plural:"shows", dateField:"first_air_date", enjoy:"Enjoy the binge",
+    runtimeLabel:"Max episode length", runtimes:[[30,"Under 30 min"],[45,"Under 45 min"],[60,"Under 1 hour"]] }
+};
+
 let apiKey=null, region="US";
+let mediaType="movie";
 let providers=[]; // {id,label,logo}
-let genres=[]; // {id,name}
+let genresByType={movie:[],tv:[]}; // {id,name}; TV genres have different ids/names
 let selectedPlatformIds = new Set();
-let excludedIds = new Set();
+let excludedIds = new Set(); // skipped via "Not feeling it" this session
+let seenKeys = new Set();    // persisted "Seen it" list, see seenKey()
 let personCache = {};
 
 const $=id=>document.getElementById(id);
@@ -318,18 +345,22 @@ async function initApp(){
     $('subhead').textContent += " (Your key isn't persisting between reloads in this environment — you'll need to re-paste it next time.)";
   }
   try{
-    const [genreData, providerData] = await Promise.all([
+    const [movieGenres, tvGenres, providerData, savedMode] = await Promise.all([
       tmdb('/genre/movie/list',{}),
-      tmdb('/watch/providers/movie',{watch_region:region})
+      tmdb('/genre/tv/list',{}),
+      tmdb('/watch/providers/movie',{watch_region:region}), // provider ids are shared with TV
+      safeStorageGet('media-type')
     ]);
-    genres = genreData.genres;
+    genresByType = {movie: movieGenres.genres, tv: tvGenres.genres};
+    if(savedMode && MEDIA[savedMode.value]) mediaType = savedMode.value;
     const seen = new Set();
     providers = [];
     KNOWN_PLATFORMS.forEach(kp=>{
       const found = providerData.results.find(p=>p.provider_name.toLowerCase().includes(kp.match) && !seen.has(kp.label));
       if(found){ seen.add(kp.label); providers.push({id:found.provider_id, label:kp.label, logo:found.logo_path}); }
     });
-    buildGenreOptions();
+    applyMediaType();
+    loadSeen();
     buildPlatformChips();
     updatePoolCount();
   }catch(e){
@@ -337,11 +368,39 @@ async function initApp(){
   }
 }
 
+// Syncs the mode toggle and the mode-dependent filters to mediaType.
+function applyMediaType(){
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active', b.dataset.mode===mediaType));
+  $('starRow').hidden = mediaType==='tv'; // TMDB's /discover/tv has no cast filter
+  buildGenreOptions();
+  buildRuntimeOptions();
+}
+document.querySelectorAll('.mode-btn').forEach(b=>{
+  b.onclick = ()=>{
+    if(b.dataset.mode===mediaType) return;
+    mediaType = b.dataset.mode;
+    safeStorageSet('media-type', mediaType);
+    applyMediaType();
+    updatePoolCount();
+  };
+});
+
 function buildGenreOptions(){
   const sel=$('genreSelect');
-  genres.sort((a,b)=>a.name.localeCompare(b.name)).forEach(g=>{
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Any</option>';
+  [...genresByType[mediaType]].sort((a,b)=>a.name.localeCompare(b.name)).forEach(g=>{
     const o=document.createElement('option'); o.value=g.id; o.textContent=g.name; sel.appendChild(o);
   });
+  // keep the genre when switching modes if it exists in both lists (e.g. Comedy, Drama)
+  sel.value = [...sel.options].some(o=>o.value===prev) ? prev : "";
+}
+
+function buildRuntimeOptions(){
+  const cfg=MEDIA[mediaType];
+  $('runtimeLabel').textContent = cfg.runtimeLabel;
+  $('runtimeSelect').innerHTML = '<option value="">Any</option>' +
+    cfg.runtimes.map(([v,t])=>'<option value="'+v+'">'+t+'</option>').join('');
 }
 
 function buildPlatformChips(){
@@ -407,11 +466,12 @@ async function buildDiscoverParams(){
   if($('genreSelect').value) params.with_genres = $('genreSelect').value;
   if($('decadeSelect').value){
     const d = Number($('decadeSelect').value);
-    params["primary_release_date.gte"] = d+"-01-01";
-    params["primary_release_date.lte"] = (d+9)+"-12-31";
+    const dateField = MEDIA[mediaType].dateField;
+    params[dateField+".gte"] = d+"-01-01";
+    params[dateField+".lte"] = (d+9)+"-12-31";
   }
-  if($('runtimeSelect').value) params["with_runtime.lte"] = $('runtimeSelect').value;
-  const starName = $('starInput').value.trim();
+  if($('runtimeSelect').value) params["with_runtime.lte"] = $('runtimeSelect').value; // episode runtime for TV
+  const starName = mediaType==='movie' ? $('starInput').value.trim() : "";
   if(starName){
     const pid = await resolvePersonId(starName);
     if(pid) params.with_cast = pid; else params.with_cast = "0"; // no match -> empty pool
@@ -433,8 +493,8 @@ function updatePoolCount(){
   debounceTimer = setTimeout(async ()=>{
     try{
       const params = await buildDiscoverParams();
-      const data = await tmdb('/discover/movie', {...params, page:1});
-      el.textContent = (data.total_results||0)+" movies match right now.";
+      const data = await tmdb('/discover/'+mediaType, {...params, page:1});
+      el.textContent = (data.total_results||0)+" "+MEDIA[mediaType].plural+" match right now.";
       $('pickBtn').disabled = !data.total_results;
     }catch(e){
       el.textContent = "Couldn't check catalog: "+e.message;
@@ -447,7 +507,7 @@ function updateFilterSummary(){
   const active=[
     $('genreSelect').selectedOptions[0] && $('genreSelect').value ? $('genreSelect').selectedOptions[0].text:"",
     $('decadeSelect').value ? $('decadeSelect').selectedOptions[0].text:"",
-    $('starInput').value,
+    mediaType==='movie' ? $('starInput').value : "",
     rtText!=="Any"?rtText:"",
     $('freeOnlyCheck').checked?"Free only":"",
     $('primeIncludedCheck').checked?"Prime included":""
@@ -463,16 +523,23 @@ $('primeIncludedCheck').addEventListener('change',updatePoolCount);
 // enough poster thumbnails to build the spinning strip.
 async function pickRandomMovieWithPool(){
   const params = await buildDiscoverParams();
-  const first = await tmdb('/discover/movie', {...params, page:1});
+  const first = await tmdb('/discover/'+mediaType, {...params, page:1});
   if(!first.total_results) return null;
   const maxPage = Math.min(first.total_pages||1, 500);
   const page = 1 + Math.floor(Math.random()*maxPage);
-  const extra = page===1 ? first : await tmdb('/discover/movie', {...params, page});
-  const seen = new Set();
+  const extra = page===1 ? first : await tmdb('/discover/'+mediaType, {...params, page});
+  const ids = new Set();
   const combined = [];
-  [...first.results, ...extra.results].forEach(m=>{
-    if(!seen.has(m.id) && m.poster_path && !excludedIds.has(m.id)){ seen.add(m.id); combined.push(m); }
+  const addUsable = results => results.forEach(m=>{
+    if(!ids.has(m.id) && m.poster_path && !excludedIds.has(m.id) && !isHiddenSeen(m)){ ids.add(m.id); combined.push(m); }
   });
+  addUsable([...first.results, ...extra.results]);
+  // A long seen list can empty out both pages (discover can't exclude ids server-side),
+  // so try a few more random pages before giving up.
+  for(let tries=0; !combined.length && maxPage>1 && tries<3; tries++){
+    const p = 1 + Math.floor(Math.random()*maxPage);
+    addUsable((await tmdb('/discover/'+mediaType, {...params, page:p})).results);
+  }
   if(!combined.length) return null;
   const winner = combined[Math.floor(Math.random()*combined.length)];
   return {winner, pool: combined};
@@ -537,9 +604,10 @@ async function spinToMovie(){
 }
 
 async function renderMovie(movieStub){
+  const base = '/'+mediaType+'/'+movieStub.id;
   const [details, watchData] = await Promise.all([
-    tmdb('/movie/'+movieStub.id, {append_to_response:'credits'}),
-    tmdb('/movie/'+movieStub.id+'/watch/providers', {})
+    tmdb(base, {append_to_response:'credits'}),
+    tmdb(base+'/watch/providers', {})
   ]);
   const regionWatch = (watchData.results && watchData.results[region]) || {};
   const badges = [];
@@ -548,8 +616,18 @@ async function renderMovie(movieStub){
   (regionWatch.ads||[]).forEach(p=> badges.push({label:p.provider_name, free:true}));
 
   $('resPoster').src = details.poster_path ? IMG_BASE+details.poster_path : '';
-  $('resTitle').textContent = details.title;
-  $('resMeta').textContent = (details.release_date? details.release_date.slice(0,4):"—") + (details.runtime? " · "+details.runtime+" min":"");
+  $('resTitle').textContent = details.title || details.name; // TV uses name/first_air_date
+  const date = details.release_date || details.first_air_date;
+  let meta = date ? date.slice(0,4) : "—";
+  if(mediaType==='movie'){
+    if(details.runtime) meta += " · "+details.runtime+" min";
+  } else {
+    const n = details.number_of_seasons;
+    if(n) meta += " · "+n+(n===1?" season":" seasons");
+    const ep = (details.episode_run_time||[])[0] || (details.last_episode_to_air && details.last_episode_to_air.runtime);
+    if(ep) meta += " · "+ep+" min episodes";
+  }
+  $('resMeta').textContent = meta;
   $('resGenre').textContent = details.genres.map(g=>g.name).join(", ") || "—";
   $('resStars').textContent = (details.credits.cast||[]).slice(0,3).map(c=>c.name).join(", ") || "—";
   $('resOverview').textContent = details.overview || "";
@@ -566,12 +644,14 @@ function showPicker(){
   $('rouletteWrap').classList.remove('show');
   $('resultCard').classList.remove('show');
   $('resultErr').style.display='none';
+  $('seenNote').hidden=true;
   window.scrollTo({top:0});
 }
 $('backLink').onclick = showPicker;
 
 $('pickBtn').onclick = async ()=>{
   excludedIds.clear();
+  $('seenNote').hidden=true;
   $('pickBtn').disabled=true;
   $('pickBtn').textContent='Spinning...';
   $('pickerControls').hidden=true;
@@ -587,10 +667,12 @@ $('pickBtn').onclick = async ()=>{
   $('pickBtn').textContent='🎬 Spin the wheel';
 };
 
-$('rerollBtn').onclick = async ()=>{
+// Re-spins from the result card, skipping the current title for this session.
+async function respin(btn){
+  const label = btn.textContent;
   if(window.__lastMovie) excludedIds.add(window.__lastMovie.id);
-  $('rerollBtn').disabled=true;
-  $('rerollBtn').textContent='Spinning...';
+  btn.disabled=true;
+  btn.textContent='Spinning...';
   $('backLink').hidden=true; // don't allow leaving mid-spin
   try{
     const movie = await spinToMovie();
@@ -600,13 +682,66 @@ $('rerollBtn').onclick = async ()=>{
     $('resultErr').textContent = e.message; $('resultErr').style.display='block';
   }
   $('backLink').hidden=false;
-  $('rerollBtn').disabled=false;
-  $('rerollBtn').textContent='Not feeling it';
+  btn.disabled=false;
+  btn.textContent=label;
+}
+
+$('rerollBtn').onclick = ()=>{
+  $('seenNote').hidden=true;
+  respin($('rerollBtn'));
+};
+
+$('seenBtn').onclick = async ()=>{
+  const m = window.__lastMovie;
+  if(!m) return;
+  const key = seenKey(m);
+  seenKeys.add(key);
+  saveSeen();
+  $('seenNote').hidden=true;
+  await respin($('seenBtn'));
+  $('seenNote').innerHTML = '';
+  $('seenNote').append('Marked "'+(m.title||m.name)+'" as seen.');
+  const undo = document.createElement('button');
+  undo.className='back-link'; undo.textContent='Undo';
+  undo.onclick = ()=>{ seenKeys.delete(key); saveSeen(); $('seenNote').hidden=true; };
+  $('seenNote').append(undo);
+  $('seenNote').hidden=false;
+};
+
+// Seen list: persisted as "movie:123" / "tv:456" keys, since movie and TV ids overlap.
+function seenKey(m){ return mediaType+':'+m.id; }
+function isHiddenSeen(m){ return $('hideSeenCheck').checked && seenKeys.has(seenKey(m)); }
+function saveSeen(){
+  safeStorageSet('seen-ids', JSON.stringify([...seenKeys]));
+  updateSeenUI();
+}
+async function loadSeen(){
+  const res = await safeStorageGet('seen-ids');
+  try{ if(res && res.value) seenKeys = new Set(JSON.parse(res.value)); }catch(e){}
+  updateSeenUI();
+}
+function updateSeenUI(){
+  $('seenCount').textContent = seenKeys.size ? '('+seenKeys.size+' marked)' : '';
+  $('clearSeenBtn').hidden = !seenKeys.size;
+  $('clearSeenBtn').textContent = 'Clear my seen list';
+  delete $('clearSeenBtn').dataset.armed;
+}
+// Two-tap confirm instead of confirm(), which sandboxed iframes (Claude artifacts) can block.
+$('clearSeenBtn').onclick = ()=>{
+  const btn=$('clearSeenBtn');
+  if(!btn.dataset.armed){
+    btn.dataset.armed='1';
+    btn.textContent='Tap again to clear all '+seenKeys.size;
+    setTimeout(()=>{ if(btn.dataset.armed) updateSeenUI(); }, 4000);
+    return;
+  }
+  seenKeys.clear();
+  saveSeen();
 };
 
 $('lockBtn').onclick = ()=>{
   const orig=$('lockBtn').textContent;
-  $('lockBtn').textContent="Enjoy the movie";
+  $('lockBtn').textContent=MEDIA[mediaType].enjoy;
   setTimeout(()=>$('lockBtn').textContent=orig,1800);
 };
 

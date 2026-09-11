@@ -4,34 +4,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Reel Roulette is a random movie picker built on the TMDB v3 API. The user picks their streaming services and optional filters. The app then spins a poster "roulette" strip and lands on a movie that is currently streaming on those services in their region.
+Reel Roulette is a random movie and TV show picker built on the TMDB v3 API. The user chooses Movie or Binge (TV) mode, their streaming services, and optional filters. The app then spins a poster "roulette" strip and lands on a title that is currently streaming on those services in their region.
 
-The whole app is one self-contained file, `index.html`, with inline CSS and vanilla JS. It has no build step, package manager, dependencies, tests, or linter. It needs a TMDB v3 API key, which the user enters at runtime.
+The whole app is one self-contained file, `index.html`, with inline CSS and vanilla JS. It has no build step, package manager, dependencies, tests, or linter. It needs a TMDB v3 API key, which the user enters at runtime. The setup screen explains how to get one and rejects v4 read access tokens (JWTs starting with `eyJ`).
 
 ## Running and deploying
 
 - It's hosted on GitHub Pages from the root of the `main` branch of `grandpayri/ReelRoulette`, at https://grandpayri.github.io/ReelRoulette/. Pushing to `main` deploys it.
 - To test locally, serve the folder over HTTP rather than opening `file://`. The Claude desktop Browser pane turns local files into `data:` URLs, and `localStorage` is disabled there.
+- Without an API key, you can test the UI by replacing the global `tmdb(path, params)` function with a mock in the browser console before clicking "Save & load catalog". Every API call goes through that function.
 
 ## Architecture
 
-**Persistence:** the `safeStorage*` wrappers use `window.storage` when it exists. That's the async key/value storage API Claude.ai artifacts provide (`get`/`set`/`delete`, each returning `{value}`). Otherwise, as on GitHub Pages, they fall back to `localStorage` with keys prefixed `reel-roulette:`, because the `*.github.io` origin is shared across the owner's repos. If neither works, `storageAvailable = false` and the app runs without persisting anything. Stored keys: `tmdb-key`, `tmdb-region`, `selected-provider-ids` (JSON array). The API key must never be hard-coded into the file, since the repo is public.
+**Persistence:** the `safeStorage*` wrappers use `window.storage` when it exists. That's the async key/value storage API Claude.ai artifacts provide (`get`/`set`/`delete`, each returning `{value}`). Otherwise, as on GitHub Pages, they fall back to `localStorage` with keys prefixed `reel-roulette:`, because the `*.github.io` origin is shared across the owner's repos. If neither works, `storageAvailable = false` and the app runs without persisting anything. Stored keys:
+- `tmdb-key`, `tmdb-region`
+- `selected-provider-ids` (JSON array)
+- `media-type` (`movie`/`tv`)
+- `seen-ids` (JSON array of `"movie:123"`/`"tv:456"`)
 
-**Startup flow:** `loadSavedSettings()` either shows `#setupSection` (to enter a key and region; the key is validated with a `/genre/movie/list` call before it's saved) or calls `initApp()`. `initApp()` fetches genres and the region's watch providers.
+The API key must never be hard-coded into the file, since the repo is public.
 
-**Provider matching:** the chips come from `KNOWN_PLATFORMS`, not straight from TMDB. Each entry is matched by lowercase substring against TMDB `provider_name`, and the first TMDB provider that matches wins. That makes array order and how specific each `match` string is significant: `"max"` is a loose substring. `FREE_LABELS` marks ad-supported services, which get dashed chips.
+**Startup flow:** `loadSavedSettings()` either shows `#setupSection` (to enter a key and region; the key is validated with a `/genre/movie/list` call before it's saved) or calls `initApp()`. `initApp()` fetches movie and TV genres, the region's watch providers (the movie list, whose provider IDs are shared with TV), the saved mode, and the seen list.
 
-**Filters → `/discover/movie`:** `buildDiscoverParams()` is the single place where UI state becomes TMDB discover params. Both the debounced (450 ms) live pool count in `updatePoolCount()` and the actual pick use it, so any new filter belongs there. Non-obvious behaviors:
+**Movie vs. Binge mode:** `mediaType` is `"movie"` or `"tv"`, which are TMDB's own media type names. It's interpolated straight into API paths (`/discover/{type}`, `/{type}/{id}`). Per-mode differences live in the `MEDIA` config: date field, runtime options and label, plural noun, and the lock-in message. Beyond that config:
+- `applyMediaType()` rebuilds the genre dropdown (TV genres have different IDs and names) and the runtime dropdown when the mode changes.
+- It hides the actor filter in TV mode, because `/discover/tv` doesn't support `with_cast`.
+- TV results use `name`/`first_air_date` instead of `title`/`release_date`. `renderMovie()` handles both.
+
+**Filters → `/discover/{type}`:** `buildDiscoverParams()` is the single place where UI state becomes TMDB discover params. Both the debounced (450 ms) live pool count in `updatePoolCount()` and the actual pick use it, so any new server-side filter belongs there. Non-obvious behaviors:
 - "Included with Prime" overrides the selected platform chips and forces Prime + `flatrate`.
 - "Free only" switches monetization from `flatrate` to `free,ads`.
 - The actor filter resolves a name to a person ID through `/search/person`, cached in `personCache`. If nothing matches, it sends `with_cast=0` on purpose so the pool comes back empty.
 
-**Picking:** `pickRandomMovieWithPool()` fetches page 1 plus one random page (capped at 500, TMDB's page limit). It merges them, dedupes, drops movies without posters and movies in `excludedIds`, and picks a random winner. The main pick button clears `excludedIds`. "Not feeling it" adds the current movie (`window.__lastMovie`) to it before spinning again.
+**Picking:** `pickRandomMovieWithPool()` fetches page 1 plus one random page (capped at 500, TMDB's page limit). It merges them, dedupes, drops titles without posters, titles in `excludedIds`, and seen titles (`isHiddenSeen()`), then picks a random winner. Discover can't exclude IDs on the server, so if everything gets filtered out it tries up to 3 more random pages. The live pool count doesn't subtract seen titles.
+- `excludedIds` holds session-only skips. The main spin button clears it, and "Not feeling it" adds the current title (`window.__lastMovie`) before spinning again.
+- `seenKeys` is the persisted "Seen it" list. Keys are prefixed with the media type because movie and TV IDs overlap. "Seen it" adds the current title, spins again through `respin()`, and then shows an Undo note in `#seenNote`. "Clear my seen list" uses a two-tap confirm instead of `confirm()`, which sandboxed artifact iframes can block.
 
-**Views:** the "Spin the wheel" button hides `#pickerControls` (subscriptions, filters, button, pool count), leaving only the wheel and the result. The "← Spin again" link (`showPicker()`) brings the controls back. The link stays hidden while a spin is running.
+**Views:** the "Spin the wheel" button hides `#pickerControls` (mode toggle, subscriptions, filters, button, pool count), leaving only the wheel and the result. The "← Spin again" link (`showPicker()`) brings the controls back. The link stays hidden while a spin is running, so the mode can't change mid-result.
 
 **Roulette animation:** `buildStrip()` fills a strip with shuffled pool posters and places the winner at `TARGET_INDEX`. `spinToMovie()` then uses a CSS transform transition to translate the strip until that index sits under the center indicator. `ITEM_W` (106) must equal `.roulette-item` width (96px) plus the `.roulette-strip` gap (10px). If you change the CSS without updating it, the spin stops off-center.
 
-**Result card:** `renderMovie()` fetches `/movie/{id}?append_to_response=credits` and `/movie/{id}/watch/providers`, and builds platform badges from the region's `flatrate`, `free`, and `ads` lists.
+**Result card:** `renderMovie()` fetches `/{type}/{id}?append_to_response=credits` and `/{type}/{id}/watch/providers`, and builds platform badges from the region's `flatrate`, `free`, and `ads` lists.
 
 The TMDB attribution line in the footer ("uses the TMDB API but is not endorsed or certified by TMDB") is a TMDB API terms requirement and should stay.
