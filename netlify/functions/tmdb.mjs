@@ -39,7 +39,10 @@ export default async (req) => {
   const cors = {
     "Access-Control-Allow-Origin": origin || "*",
     "Vary": "Origin",
-    "Netlify-Vary": "header=Origin",
+    // A custom Netlify-Vary replaces the default cache key, which for functions
+    // includes the query string. Without "query", every discover/search call to
+    // the same path would get one cached response.
+    "Netlify-Vary": "query,header=Origin",
   };
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: { ...cors, "Access-Control-Allow-Methods": "GET", "Access-Control-Max-Age": "86400" } });
