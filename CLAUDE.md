@@ -61,4 +61,8 @@ The API key must never be hard-coded into the file, since the repo is public.
 
 **Result card:** `renderMovie()` fetches `/{type}/{id}?append_to_response=credits` and `/{type}/{id}/watch/providers`, and builds platform badges from the region's `flatrate`, `free`, and `ads` lists. The poster links to the TMDB page. TMDB's API has no per-service deep links (that data is licensed from JustWatch), so badges link to the service's own search for the title through `SERVICE_SEARCH`/`serviceSearchUrl()`. Services not listed there link to TMDB's "where to watch" page (the region's `link`). Only add search URL patterns you've verified.
 
-The TMDB attribution line in the footer ("uses the TMDB API but is not endorsed or certified by TMDB") is a TMDB API terms requirement and should stay.
+Both attribution lines in the footer are TMDB API terms requirements and must stay:
+- the TMDB notice ("uses the TMDB API but is not endorsed or certified by TMDB")
+- the JustWatch credit, which is required for any use of watch provider data
+
+`README.md` is the user-facing and setup documentation. Keep it in sync when features or deployment change.
